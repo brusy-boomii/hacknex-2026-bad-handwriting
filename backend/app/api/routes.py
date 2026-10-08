@@ -1,7 +1,14 @@
 from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
-from app.schemas import AnalyzeResponse, ErrorResponse, HealthResponse
+from fastapi.responses import PlainTextResponse
+from app.schemas import (
+    AnalyzeResponse,
+    ErrorResponse,
+    ExportJsonResponse,
+    HealthResponse,
+    ReviewExportRequest,
+)
 from app.services.handwriting_ocr import (
     HandwritingOCRService,
     OCRExecutionError,
@@ -9,12 +16,18 @@ from app.services.handwriting_ocr import (
 )
 from app.services.preprocessing import PreprocessingService
 from app.services.uncertainty import UncertaintyService
+from app.services.verification import (
+    SecondaryVerificationService,
+    build_export_json,
+    build_export_txt,
+)
 from app.utils.config import ALLOWED_IMAGE_EXTENSIONS, get_max_upload_size_bytes
 
 router = APIRouter()
 preprocessing_service = PreprocessingService()
 ocr_service = HandwritingOCRService()
 uncertainty_service = UncertaintyService()
+verification_service = SecondaryVerificationService()
 
 
 @router.get(
@@ -24,14 +37,14 @@ uncertainty_service = UncertaintyService()
 )
 async def health_check() -> HealthResponse:
     """
-    Health check endpoint providing application status and Phase 3 metadata.
+    Health check endpoint providing application status and Phase 4 metadata.
     """
     return HealthResponse(
         status="healthy",
         application="Extreme Bad-Handwriting Digitizing Stack",
-        version="0.3.0",
-        phase=3,
-        description="Phase 3 confidence-aware uncertainty detection active.",
+        version="0.4.0",
+        phase=4,
+        description="Phase 4 selective verification, human review, and export workflow active.",
     )
 
 
@@ -44,16 +57,17 @@ async def health_check() -> HealthResponse:
         status.HTTP_502_BAD_GATEWAY: {"model": ErrorResponse},
         status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
     },
-    summary="Validate, Preprocess, Recognize, and Evaluate Uncertainty on Handwritten Image",
+    summary="Validate, Preprocess, Recognize, Evaluate Uncertainty, and Run Selective Verification",
 )
 async def analyze_handwriting(
     file: Optional[UploadFile] = File(default=None),
 ) -> AnalyzeResponse:
     """
-    Phase 3 endpoint for confidence-aware handwriting digitization.
+    Phase 4 endpoint for confidence-aware handwriting digitization.
     Validates the uploaded image, runs handwriting-safe preprocessing, executes
     PP-OCRv3 optical recognition, evaluates multi-signal region uncertainty,
-    and returns structured recognition and uncertainty results.
+    triggers selective secondary verification only on uncertain regions,
+    and returns structured recognition, uncertainty, verification, and provenance fields.
     """
     if file is None:
         raise HTTPException(
@@ -133,16 +147,22 @@ async def analyze_handwriting(
             ocr_regions=ocr_output.result.regions,
         )
 
-        # Keep recognition.regions synchronized with the enriched region-level uncertainty fields
+        verified_regions, verification_summary = verification_service.verify_regions(
+            uncertainty_summary.regions
+        )
+
+        enriched_uncertainty = uncertainty_summary.model_copy(
+            update={"regions": verified_regions}
+        )
         enriched_recognition = ocr_output.result.model_copy(
-            update={"regions": uncertainty_summary.regions}
+            update={"regions": verified_regions}
         )
 
         combined_warnings = list(prepared.warnings) + list(ocr_output.warnings)
-        if uncertainty_summary.flagged_region_count > 0:
+        if enriched_uncertainty.flagged_region_count > 0:
             combined_warnings.append(
-                f"{uncertainty_summary.flagged_region_count} of {uncertainty_summary.total_regions} "
-                f"region(s) flagged for human review (overall reliability: {uncertainty_summary.overall_level})."
+                f"{enriched_uncertainty.flagged_region_count} of {enriched_uncertainty.total_regions} "
+                f"region(s) flagged for human review (overall reliability: {enriched_uncertainty.overall_level})."
             )
 
         region_count = len(enriched_recognition.regions)
@@ -150,7 +170,7 @@ async def analyze_handwriting(
             summary_msg = (
                 f"Recognition completed ({region_count} region(s) detected in "
                 f"{enriched_recognition.processing_time_ms:.1f} ms; "
-                f"overall reliability: {uncertainty_summary.overall_level})."
+                f"overall reliability: {enriched_uncertainty.overall_level})."
             )
         else:
             summary_msg = "Image validated and processed, but no legible text regions were detected."
@@ -162,7 +182,10 @@ async def analyze_handwriting(
             metadata=prepared.metadata,
             preprocessing=prepared.preprocessing,
             recognition=enriched_recognition,
-            uncertainty=uncertainty_summary,
+            uncertainty=enriched_uncertainty,
+            verification=verification_summary,
+            raw_ocr_text=enriched_recognition.text,
+            final_text=enriched_recognition.text,
             warnings=combined_warnings,
             message=summary_msg,
             pipeline_status="recognition_complete",
@@ -177,3 +200,45 @@ async def analyze_handwriting(
         ) from exc
     finally:
         await file.close()
+
+
+@router.post(
+    "/export/json",
+    response_model=ExportJsonResponse,
+    responses={status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse}},
+    summary="Export Provenance-Preserving JSON Transcription",
+)
+async def export_json_endpoint(request: ReviewExportRequest) -> ExportJsonResponse:
+    """
+    Generate a structured JSON export preserving raw OCR output, uncertainty tier,
+    human review status, and final human-verified transcription.
+    """
+    try:
+        return build_export_json(request)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/export/txt",
+    response_class=PlainTextResponse,
+    responses={status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse}},
+    summary="Export Plain-Text (.txt) Transcription with Provenance",
+)
+async def export_txt_endpoint(request: ReviewExportRequest) -> PlainTextResponse:
+    """
+    Generate a plain-text (.txt) export containing the final verified transcription
+    and unmodified raw OCR provenance.
+    """
+    try:
+        txt_content = build_export_txt(request)
+        return PlainTextResponse(content=txt_content, media_type="text/plain; charset=utf-8")
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+

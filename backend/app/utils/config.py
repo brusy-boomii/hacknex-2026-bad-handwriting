@@ -115,3 +115,34 @@ def get_allowed_origins() -> List[str]:
     """
     raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
     return [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+
+
+@dataclass(frozen=True)
+class SecondaryVerificationConfig:
+    """
+    Configuration for Phase 4 selective secondary verification.
+    Operates without an external API by default and cleanly reports
+    'secondary verification unavailable' when no external provider is configured.
+    """
+
+    enabled: bool = False
+    provider: str = "none"
+    api_key_configured: bool = False
+
+
+def get_secondary_verification_config() -> SecondaryVerificationConfig:
+    """
+    Load Phase 4 secondary verification settings from environment variables.
+    Never exposes or logs secret values.
+    """
+    raw_enabled = (os.getenv("SECONDARY_VERIFICATION_ENABLED") or "").split("#")[0].strip().lower()
+    enabled = raw_enabled in {"1", "true", "yes", "on"}
+    provider = (os.getenv("SECONDARY_VERIFICATION_PROVIDER") or "none").split("#")[0].strip() or "none"
+    raw_key = (os.getenv("SECONDARY_VERIFICATION_API_KEY") or "").split("#")[0].strip()
+    api_key_configured = bool(raw_key)
+    return SecondaryVerificationConfig(
+        enabled=enabled and provider.lower() != "none" and api_key_configured,
+        provider=provider if (enabled and api_key_configured) else "none",
+        api_key_configured=api_key_configured,
+    )
+

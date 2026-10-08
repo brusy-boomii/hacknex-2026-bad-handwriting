@@ -13,7 +13,7 @@ load_dotenv()
 app = FastAPI(
     title="Extreme Bad-Handwriting Digitizing Stack",
     description="HNX26EPS04 — Confidence-aware handwriting digitization system for difficult handwriting.",
-    version="0.3.0",
+    version="0.4.0",
 )
 
 app.add_middleware(

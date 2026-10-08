@@ -605,3 +605,248 @@ button:disabled {
   font-size: 1.05rem;
   margin-top: 0.4rem;
 }
+
+.innovation-banner {
+  margin: 0.65rem auto 0.9rem auto;
+  display: inline-block;
+  padding: 0.4rem 1rem;
+  background-color: #1c1d24;
+  border: 1px solid #383b4e;
+  border-radius: 6px;
+  color: #dfe2ff;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.pipeline-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.step-pill {
+  padding: 0.22rem 0.65rem;
+  border-radius: 4px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background-color: #1c1c21;
+  color: #777;
+  border: 1px solid #2e2e36;
+}
+
+.step-pill.step-active {
+  background-color: rgba(100, 108, 255, 0.16);
+  color: #bfc4ff;
+  border-color: #525ce5;
+}
+
+.step-pill.step-done {
+  background-color: rgba(67, 160, 71, 0.18);
+  color: #9be09e;
+  border-color: #43a047;
+}
+
+.step-arrow {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.verification-summary-bar {
+  margin-top: 1rem;
+  padding: 0.65rem 0.95rem;
+  background-color: #18181f;
+  border: 1px solid #2f3142;
+  border-radius: 6px;
+  font-size: 0.86rem;
+  color: #ccc;
+}
+
+.review-progress-pill {
+  background-color: #1b1c24;
+  border: 1px solid #3a3d52;
+  color: #cfd2ff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.25rem 0.7rem;
+  border-radius: 4px;
+}
+
+.review-status-badge {
+  display: inline-block;
+  padding: 0.18rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.review-pending {
+  background-color: rgba(158, 158, 158, 0.16);
+  color: #bdbdbd;
+  border-color: #616161;
+}
+
+.review-accepted {
+  background-color: rgba(67, 160, 71, 0.2);
+  color: #a5d6a7;
+  border-color: #43a047;
+}
+
+.review-corrected {
+  background-color: rgba(41, 182, 246, 0.2);
+  color: #81d4fa;
+  border-color: #0288d1;
+}
+
+.review-rejected {
+  background-color: rgba(251, 140, 0, 0.2);
+  color: #ffcc80;
+  border-color: #f57c00;
+}
+
+.raw-diff-note {
+  font-size: 0.8rem;
+  color: #9e9eae;
+  font-style: italic;
+}
+
+.verified-inline-tag {
+  color: #81c784;
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.secondary-verification-box {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background-color: #121217;
+  border: 1px solid #2d2e3a;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.sv-details {
+  margin-top: 0.25rem;
+}
+
+.candidate-highlight {
+  background-color: rgba(100, 108, 255, 0.2);
+  color: #dfe2ff;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.quick-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.action-accept-ocr {
+  border-color: #43a047;
+  color: #a5d6a7;
+}
+
+.action-accept-candidate {
+  border-color: #0288d1;
+  color: #81d4fa;
+}
+
+.action-reject-candidate {
+  border-color: #f57c00;
+  color: #ffcc80;
+}
+
+.export-json-btn {
+  padding: 0.5rem 1rem !important;
+  font-size: 0.86rem !important;
+  border-color: #525ce5;
+  color: #dfe2ff;
+}
+
+.export-success-banner {
+  margin-bottom: 1rem;
+  padding: 0.65rem 1rem;
+  background-color: rgba(67, 160, 71, 0.16);
+  border-left: 4px solid #43a047;
+  border-radius: 4px;
+  color: #a5d6a7;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.provenance-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.25rem;
+  margin-top: 0.75rem;
+}
+
+.provenance-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.provenance-col-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.provenance-tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.raw-tag {
+  background-color: #26262e;
+  color: #ccc;
+  border: 1px solid #3c3c48;
+}
+
+.verified-tag {
+  background-color: rgba(67, 160, 71, 0.22);
+  color: #a5d6a7;
+  border: 1px solid #43a047;
+}
+
+.pending-tag {
+  background-color: rgba(251, 192, 45, 0.18);
+  color: #fff176;
+  border: 1px solid #fbc02d;
+}
+
+.provenance-sub {
+  font-size: 0.78rem;
+  color: #888;
+}
+
+.provenance-text-box {
+  margin: 0;
+  min-height: 96px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.94rem;
+  background-color: #141418;
+  border: 1px solid #2e2e38;
+}
+
+.verified-text-box {
+  border-color: #3b4254;
+  background-color: #13161c;
+}
+

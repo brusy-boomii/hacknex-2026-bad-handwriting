@@ -132,6 +132,7 @@ class UncertaintyService:
             updated_region = reg.model_copy(
                 update={
                     "id": reg.id if reg.id >= 1 else idx,
+                    "raw_ocr": reg.raw_ocr if reg.raw_ocr is not None else reg.text,
                     "confidence": raw_conf,
                     "ocr_confidence": raw_conf,
                     "normalized_confidence": norm_conf,
@@ -140,6 +141,9 @@ class UncertaintyService:
                     "reasons": reasons,
                     "uncertainty_reasons": list(reasons),
                     "quality_indicators": quality_indicators,
+                    "review_status": reg.review_status or "PENDING",
+                    "final_text": reg.final_text if reg.final_text is not None else reg.text,
+                    "human_verified": bool(reg.human_verified),
                 }
             )
             analyzed_regions.append(updated_region)
