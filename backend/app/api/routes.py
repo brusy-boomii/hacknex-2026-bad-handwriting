@@ -2,11 +2,17 @@ from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from app.schemas import AnalyzeResponse, ErrorResponse, HealthResponse
+from app.services.handwriting_ocr import (
+    HandwritingOCRService,
+    OCRExecutionError,
+    OCRModelUnavailableError,
+)
 from app.services.preprocessing import PreprocessingService
 from app.utils.config import ALLOWED_IMAGE_EXTENSIONS, get_max_upload_size_bytes
 
 router = APIRouter()
 preprocessing_service = PreprocessingService()
+ocr_service = HandwritingOCRService()
 
 
 @router.get(
@@ -16,14 +22,14 @@ preprocessing_service = PreprocessingService()
 )
 async def health_check() -> HealthResponse:
     """
-    Health check endpoint providing application status and Phase 1 metadata.
+    Health check endpoint providing application status and Phase 2 metadata.
     """
     return HealthResponse(
         status="healthy",
         application="Extreme Bad-Handwriting Digitizing Stack",
-        version="0.1.0",
-        phase=1,
-        description="Foundation phase established.",
+        version="0.2.0",
+        phase=2,
+        description="Phase 2 handwriting recognition pipeline active.",
     )
 
 
@@ -33,16 +39,19 @@ async def health_check() -> HealthResponse:
     responses={
         status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
         status.HTTP_413_CONTENT_TOO_LARGE: {"model": ErrorResponse},
+        status.HTTP_502_BAD_GATEWAY: {"model": ErrorResponse},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
     },
-    summary="Validate and Inspect Uploaded Handwriting Image",
+    summary="Validate, Preprocess, and Recognize Handwritten Image",
 )
 async def analyze_handwriting(
     file: Optional[UploadFile] = File(default=None),
 ) -> AnalyzeResponse:
     """
-    Foundation endpoint for handwriting image ingestion.
-    Validates upload presence, filename, extension, MIME type, byte size,
-    and structural image integrity before returning verified image metadata.
+    Phase 2 endpoint for handwriting digitization.
+    Validates the uploaded image, runs handwriting-safe preprocessing, executes
+    optical recognition, and returns recognized text, regions, bounding boxes,
+    and genuine engine confidence scores.
     """
     if file is None:
         raise HTTPException(
@@ -89,19 +98,54 @@ async def analyze_handwriting(
             )
 
         try:
-            image_info = preprocessing_service.validate_and_get_info(content)
+            prepared = preprocessing_service.prepare_for_pipeline(content)
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(exc),
             ) from exc
 
+        try:
+            ocr_output = ocr_service.recognize_with_warnings(
+                image=prepared.recognition_image,
+                original_size=(prepared.metadata.width, prepared.metadata.height),
+            )
+        except OCRModelUnavailableError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Recognition engine model is currently unavailable.",
+            ) from exc
+        except OCRExecutionError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Recognition engine failed while processing the uploaded image.",
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+
+        combined_warnings = list(prepared.warnings) + list(ocr_output.warnings)
+        region_count = len(ocr_output.result.regions)
+        if region_count > 0:
+            summary_msg = (
+                f"Recognition completed ({region_count} region(s) detected in "
+                f"{ocr_output.result.processing_time_ms:.1f} ms)."
+            )
+        else:
+            summary_msg = "Image validated and processed, but no legible text regions were detected."
+
         return AnalyzeResponse(
-            status="received",
+            status="success",
             filename=filename,
-            metadata=image_info,
-            message="Image received and validated. Recognition pipeline will be implemented in Phase 2.",
-            pipeline_status="foundation_active",
+            image=prepared.metadata,
+            metadata=prepared.metadata,
+            preprocessing=prepared.preprocessing,
+            recognition=ocr_output.result,
+            warnings=combined_warnings,
+            message=summary_msg,
+            pipeline_status="recognition_complete",
         )
 
     except HTTPException:

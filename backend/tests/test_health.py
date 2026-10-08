@@ -12,6 +12,6 @@ def test_health_check():
     parsed = HealthResponse(**data)
     assert parsed.status == "healthy"
     assert parsed.application == "Extreme Bad-Handwriting Digitizing Stack"
-    assert parsed.version == "0.1.0"
-    assert parsed.phase == 1
-    assert parsed.description == "Foundation phase established."
+    assert parsed.version == "0.2.0"
+    assert parsed.phase == 2
+    assert "Phase 2" in parsed.description

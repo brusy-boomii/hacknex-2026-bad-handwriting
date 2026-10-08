@@ -1,5 +1,5 @@
 import io
-from PIL import Image
+from PIL import Image, ImageDraw
 from fastapi.testclient import TestClient
 from app.main import app
 from app.schemas import AnalyzeResponse
@@ -7,10 +7,26 @@ from app.schemas import AnalyzeResponse
 client = TestClient(app)
 
 
-def _create_image_bytes(fmt: str = "PNG", mode: str = "RGB", size: tuple[int, int] = (120, 80)) -> bytes:
+def _create_image_bytes(
+    fmt: str = "PNG",
+    mode: str = "RGB",
+    size: tuple[int, int] = (120, 80),
+) -> bytes:
     buf = io.BytesIO()
-    color = 128 if mode == "L" else (200, 100, 50)
+    color = 240 if mode == "L" else (245, 245, 245)
     Image.new(mode, size, color=color).save(buf, format=fmt)
+    return buf.getvalue()
+
+
+def _create_text_image_bytes(text: str = "HACKNEX 2026", size: tuple[int, int] = (420, 120)) -> bytes:
+    img = Image.new("RGB", size, color=(255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    # Draw thick dark strokes so text is clearly legible to the optical recognizer
+    for dx in (0, 1):
+        for dy in (0, 1):
+            draw.text((28 + dx, 42 + dy), text, fill=(15, 15, 15))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
     return buf.getvalue()
 
 
@@ -23,14 +39,36 @@ def test_analyze_valid_png_image():
     assert response.status_code == 200
     data = response.json()
     parsed = AnalyzeResponse(**data)
-    assert parsed.status == "received"
+    assert parsed.status == "success"
     assert parsed.filename == "sample_note.png"
-    assert parsed.metadata.format == "PNG"
-    assert parsed.metadata.mode == "RGB"
-    assert parsed.metadata.width == 120
-    assert parsed.metadata.height == 80
-    assert parsed.metadata.channels == 3
-    assert parsed.pipeline_status == "foundation_active"
+    assert parsed.image.format == "PNG"
+    assert parsed.image.mode == "RGB"
+    assert parsed.image.width == 120
+    assert parsed.image.height == 80
+    assert parsed.image.channels == 3
+    assert parsed.metadata == parsed.image
+    assert parsed.pipeline_status == "recognition_complete"
+    assert parsed.recognition.engine == "rapidocr-onnxruntime (PP-OCRv3)"
+    assert parsed.recognition.processing_time_ms >= 0.0
+
+
+def test_analyze_valid_text_image_performs_real_recognition():
+    img_bytes = _create_text_image_bytes("HACKNEX 2026")
+    response = client.post(
+        "/analyze",
+        files={"file": ("handwriting_line.png", io.BytesIO(img_bytes), "image/png")},
+    )
+    assert response.status_code == 200
+    parsed = AnalyzeResponse(**response.json())
+    assert parsed.status == "success"
+    assert "HACKNEX" in parsed.recognition.text.upper()
+    assert len(parsed.recognition.regions) >= 1
+    first_region = parsed.recognition.regions[0]
+    assert first_region.bbox is not None
+    assert first_region.bbox.width > 0
+    assert first_region.bbox.height > 0
+    assert first_region.confidence is not None
+    assert 0.0 <= first_region.confidence <= 1.0
 
 
 def test_analyze_valid_grayscale_jpeg():
@@ -42,11 +80,11 @@ def test_analyze_valid_grayscale_jpeg():
     assert response.status_code == 200
     data = response.json()
     parsed = AnalyzeResponse(**data)
-    assert parsed.metadata.format == "JPEG"
-    assert parsed.metadata.mode == "L"
-    assert parsed.metadata.width == 64
-    assert parsed.metadata.height == 48
-    assert parsed.metadata.channels == 1
+    assert parsed.image.format == "JPEG"
+    assert parsed.image.mode == "L"
+    assert parsed.image.width == 64
+    assert parsed.image.height == 48
+    assert parsed.image.channels == 1
 
 
 def test_analyze_missing_file():
