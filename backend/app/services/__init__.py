@@ -5,6 +5,7 @@ from app.services.handwriting_ocr import (
     OCRServiceOutput,
 )
 from app.services.preprocessing import PreparedImageBundle, PreprocessingService
+from app.services.uncertainty import UncertaintyService, analyze_uncertainty
 
 __all__ = [
     "HandwritingOCRService",
@@ -13,4 +14,6 @@ __all__ = [
     "OCRServiceOutput",
     "PreparedImageBundle",
     "PreprocessingService",
+    "UncertaintyService",
+    "analyze_uncertainty",
 ]

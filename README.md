@@ -6,20 +6,20 @@
 Traditional OCR systems frequently fail when encountering "extreme" handwriting: doctor scrawls, cramped margin notes, inconsistent spacing, crossed-out words, and poor image quality. These systems often hallucinate text when uncertain, leading to critical errors in digitization.
 
 ## Proposed Solution
-A confidence-aware handwriting digitization system that prioritizes integrity over hallucination. The core design is a modular pipeline that **validates and preprocesses**, **recognizes** (Phase 2), **measures confidence** (Phase 3), and **flags uncertainty** instead of inventing results.
+A confidence-aware handwriting digitization system that prioritizes integrity over hallucination. The core design is a modular pipeline that **validates and preprocesses**, **recognizes**, **measures multi-signal confidence & image quality**, **flags uncertainty (`HIGH` / `MEDIUM` / `LOW` / `UNREADABLE`)**, and supports **human-in-the-loop review** instead of inventing results.
 
-## Current Status: Phase 2 — Baseline Handwriting Recognition Pipeline
+## Current Status: Phase 3 — Confidence-Aware Uncertainty Detection
 - [x] **Phase 1 — Foundation:** FastAPI backend, Pydantic schemas, upload validation, React 19 + Vite frontend with drag-and-drop, ESLint v9 flat config.
-- [x] **Phase 2 — Recognition Pipeline:**
-  - Handwriting-safe preprocessing (`PreprocessingService`) preserving both original image and recognition-ready image (EXIF orientation, aspect-ratio-preserving scaling, grayscale, contrast normalization, and conditional denoising).
-  - Modular optical recognition engine (`HandwritingOCRService`) powered by **RapidOCR (`rapidocr-onnxruntime` / PP-OCRv3 on ONNX Runtime CPU)**.
-  - Real text detection, line/region bounding boxes, and genuine engine confidence scores returned via `POST /analyze`.
-  - Updated document-analysis frontend displaying recognition telemetry, editable recognized text, warnings, and detected region coordinates.
-  - Baseline CER/WER evaluation script (`scripts/evaluate_recognition.py`) and dataset structure (`data/evaluation/`).
+- [x] **Phase 2 — Recognition Pipeline:** Handwriting-safe preprocessing (`PreprocessingService`), modular optical recognition (`HandwritingOCRService` via `rapidocr-onnxruntime` PP-OCRv3 on CPU), and CER/WER evaluation script (`scripts/evaluate_recognition.py`).
+- [x] **Phase 3 — Confidence-Aware Uncertainty Detection:**
+  - Dedicated decoupled `UncertaintyService` (`backend/app/services/uncertainty.py`) combining raw PP-OCRv3 confidence ($60\%$), local OpenCV image quality ($25\%$: Laplacian sharpness, $P_{95}-P_{5}$ contrast, Otsu stroke visibility, median residual noise, box geometry), and structural text plausibility ($15\%$).
+  - Transparent region-level classification into `HIGH`, `MEDIUM`, `LOW`, and `UNREADABLE` tiers with explainable reason codes and configurable thresholds.
+  - Frontend SVG bounding-box overlay on the original document image, accessibility-friendly tier badges + legend, uncertainty-aware transcription view, and interactive human-in-the-loop region inspector & correction panel.
+  - 31 automated `pytest` tests covering foundation, recognition, and all 10 Phase 3 uncertainty scenarios.
 
 ## Technology Stack
-- **Backend:** Python 3.13, FastAPI, Uvicorn, Pillow, NumPy, RapidOCR (`rapidocr-onnxruntime` / ONNX Runtime CPU), Pydantic
-- **Frontend:** React 19, Vite 6, ESLint 9, CSS
+- **Backend:** Python 3.13, FastAPI, Uvicorn, Pillow, NumPy, OpenCV (`opencv-python-headless`), RapidOCR (`rapidocr-onnxruntime` / ONNX Runtime CPU), Pydantic
+- **Frontend:** React 19, Vite 6, ESLint 9, SVG Document Overlay, CSS
 - **Testing & Evaluation:** pytest, httpx, CER/WER Levenshtein evaluation utility
 
 ## Folder Structure
@@ -30,22 +30,24 @@ hacknex-2026-bad-handwriting/
 │   │   ├── api/
 │   │   │   └── routes.py              # GET /health and POST /analyze endpoints
 │   │   ├── schemas/
-│   │   │   └── __init__.py            # Typed Pydantic models (AnalyzeResponse, RecognitionResult, etc.)
+│   │   │   └── __init__.py            # Typed Pydantic models (AnalyzeResponse, UncertaintySummary, etc.)
 │   │   ├── services/
 │   │   │   ├── preprocessing.py       # Handwriting-safe preprocessing & dual-image preservation
-│   │   │   └── handwriting_ocr.py     # Modular RapidOCR (PP-OCRv3) recognition service
+│   │   │   ├── handwriting_ocr.py     # Modular RapidOCR (PP-OCRv3) recognition service
+│   │   │   └── uncertainty.py         # Phase 3 multi-signal uncertainty & image quality service
 │   │   ├── utils/
-│   │   │   └── config.py              # Environment config (MAX_UPLOAD_SIZE_BYTES, CORS)
+│   │   │   └── config.py              # Environment config & configurable uncertainty thresholds
 │   │   └── main.py                    # FastAPI application entry point
 │   ├── tests/
 │   │   ├── test_health.py             # Health endpoint tests
 │   │   ├── test_analyze.py            # Upload validation & /analyze pipeline tests
-│   │   └── test_recognition.py        # Preprocessing, OCR service, error handling & evaluation tests
+│   │   ├── test_recognition.py        # Preprocessing, OCR service, & CER/WER evaluation tests
+│   │   └── test_uncertainty.py        # Phase 3 uncertainty classification & image quality tests
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx                    # Document upload, telemetry, editable text & region table UI
-│   │   ├── index.css                  # Forensic document-analysis styling
+│   │   ├── App.jsx                    # Upload, SVG bbox overlay, uncertainty transcription & review UI
+│   │   ├── index.css                  # Forensic document-analysis & tier badge styling
 │   │   └── main.jsx                   # React root mount
 │   ├── eslint.config.js               # ESLint v9 flat config
 │   ├── package.json
@@ -58,7 +60,8 @@ hacknex-2026-bad-handwriting/
 ├── docs/
 │   ├── architecture/
 │   │   ├── phase-1.md                 # Phase 1 foundation architecture
-│   │   └── phase-2-recognition.md     # Phase 2 recognition engine selection & pipeline design
+│   │   ├── phase-2-recognition.md     # Phase 2 recognition engine selection & pipeline design
+│   │   └── phase-3-uncertainty.md     # Phase 3 multi-signal uncertainty algorithm & thresholds
 │   └── evaluation/
 ├── scripts/
 │   └── evaluate_recognition.py        # Real CER/WER evaluation runner
@@ -84,84 +87,22 @@ hacknex-2026-bad-handwriting/
 4. Run production build check: `npm run build`
 5. Run development server: `npm run dev`
 
-### Baseline Evaluation (`CER` / `WER`)
-```powershell
-backend\.venv\Scripts\python.exe scripts\evaluate_recognition.py
-```
-
-## API Documentation (Phase 2)
+## API Documentation (Phase 3)
 
 ### `GET /health`
-Returns `HealthResponse` (`status: "healthy"`, `version: "0.2.0"`, `phase: 2`).
+Returns `HealthResponse` (`status: "healthy"`, `version: "0.3.0"`, `phase: 3`).
 
 ### `POST /analyze`
 - **Accepted Input:** `multipart/form-data` with field `file` (`.png`, `.jpg`, `.jpeg`, `.tiff`, `.tif`, `.bmp`, up to `MAX_UPLOAD_SIZE_BYTES` = 10 MB default).
 - **Response Structure (`200 OK` — `AnalyzeResponse`):**
-  ```json
-  {
-    "status": "success",
-    "filename": "note.png",
-    "image": {
-      "format": "PNG",
-      "mode": "RGB",
-      "width": 600,
-      "height": 160,
-      "channels": 3
-    },
-    "metadata": {
-      "format": "PNG",
-      "mode": "RGB",
-      "width": 600,
-      "height": 160,
-      "channels": 3
-    },
-    "preprocessing": {
-      "original_width": 600,
-      "original_height": 160,
-      "processed_width": 600,
-      "processed_height": 160,
-      "scale_factor": 1.0,
-      "operations": ["grayscale_conversion"]
-    },
-    "recognition": {
-      "text": "Patient Rx 50mg daily",
-      "engine": "rapidocr-onnxruntime (PP-OCRv3)",
-      "processing_time_ms": 145.2,
-      "confidence": 0.8912,
-      "regions": [
-        {
-          "id": 1,
-          "text": "Patient Rx 50mg daily",
-          "confidence": 0.8912,
-          "bbox": {
-            "x_min": 24,
-            "y_min": 38,
-            "x_max": 380,
-            "y_max": 86,
-            "width": 356,
-            "height": 48,
-            "polygon": [[24, 38], [380, 38], [380, 86], [24, 86]]
-          },
-          "region_type": "line"
-        }
-      ]
-    },
-    "warnings": [],
-    "message": "Recognition completed (1 region(s) detected in 145.2 ms).",
-    "pipeline_status": "recognition_complete"
-  }
-  ```
-- **Error Responses:**
-  - `400 Bad Request`: Missing file, missing filename, unsupported extension, non-`image/*` MIME type, empty file (`0` bytes), corrupt/unreadable image bytes, or image pixel count exceeding safety cap (`40,000,000` pixels).
-  - `413 Content Too Large`: File byte size exceeds `MAX_UPLOAD_SIZE_BYTES`.
-  - `502 Bad Gateway`: Recognition engine execution failure during inference.
-  - `503 Service Unavailable`: Recognition model runtime unavailable.
+  Preserves all Phase 1 and Phase 2 fields (`status`, `filename`, `image`, `metadata`, `preprocessing`, `recognition`, `warnings`, `message`, `pipeline_status`) and adds:
+  - Enriched `recognition.regions[]` entries with `ocr_confidence`, `normalized_confidence`, `uncertainty_level` (`"HIGH" | "MEDIUM" | "LOW" | "UNREADABLE"`), `needs_review`, `reasons`, and `quality_indicators` (`laplacian_variance`, `rms_contrast`, `dynamic_range`, `stroke_ratio`, `fg_bg_separation`, `noise_level`, `image_quality_score`, `plausibility_score`).
+  - Top-level `uncertainty` (`UncertaintySummary`) containing `overall_level`, `mean_ocr_confidence`, `mean_normalized_confidence`, `mean_image_quality_score`, `total_regions`, `flagged_region_count`, `counts` (`HIGH`, `MEDIUM`, `LOW`, `UNREADABLE`), `review_recommended`, `annotated_text`, `summary_reasons`, and `regions`.
 
 ## Current Limitations
-- **Baseline Optical Recognizer Limitations:** RapidOCR (`PP-OCRv3` ONNX) runs locally on CPU and handles clear-to-moderate handwriting, alphanumeric notes, and multi-line layouts well, but severely degraded cursive or overlapping doctor scrawls can still cause character substitutions or low confidence scores.
-- **No VLM/LLM Correction or Uncertainty Highlighting Yet:** Token-level uncertainty flagging, calibration, and selective contextual verification are scheduled for Phases 3 and 4.
-- **No Fabricated Benchmarks:** CER/WER numbers are only reported when `scripts/evaluate_recognition.py` is run against genuine ground-truth handwriting pairs in `data/evaluation/`.
+- **Extreme Cursive & Degraded Scrawls:** PP-OCRv3 optical recognition has known limitations on heavily connected cursive strokes, crossed-out words, and severe slant. Phase 3 explicitly detects and flags these low-reliability regions (`LOW` / `UNREADABLE`) so they are surfaced for human review rather than trusted silently.
+- **Contextual / VLM Verification Not Yet Implemented:** Automated contextual verification or multi-engine adjudication on flagged regions is not implemented in Phase 3; uncertain regions are surfaced for manual human inspection in the UI.
+- **No Fabricated Benchmarks:** CER/WER metrics are only computed when `scripts/evaluate_recognition.py` is run on real ground-truth samples in `data/evaluation/`.
 
 ## Roadmap
-- **Phase 3:** Token/region confidence calibration and explicit uncertainty detection & flagging.
-- **Phase 4:** Selective context-aware verification and human-in-the-loop correction UI.
+- **Phase 4:** Selective context-aware / VLM verification for flagged `LOW`/`UNREADABLE` regions and structured human-verified export workflow.

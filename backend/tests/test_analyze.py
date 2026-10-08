@@ -21,7 +21,6 @@ def _create_image_bytes(
 def _create_text_image_bytes(text: str = "HACKNEX 2026", size: tuple[int, int] = (420, 120)) -> bytes:
     img = Image.new("RGB", size, color=(255, 255, 255))
     draw = ImageDraw.Draw(img)
-    # Draw thick dark strokes so text is clearly legible to the optical recognizer
     for dx in (0, 1):
         for dy in (0, 1):
             draw.text((28 + dx, 42 + dy), text, fill=(15, 15, 15))
@@ -50,6 +49,9 @@ def test_analyze_valid_png_image():
     assert parsed.pipeline_status == "recognition_complete"
     assert parsed.recognition.engine == "rapidocr-onnxruntime (PP-OCRv3)"
     assert parsed.recognition.processing_time_ms >= 0.0
+    assert parsed.uncertainty is not None
+    assert parsed.uncertainty.overall_level == "UNREADABLE"
+    assert parsed.uncertainty.review_recommended is True
 
 
 def test_analyze_valid_text_image_performs_real_recognition():
@@ -69,6 +71,10 @@ def test_analyze_valid_text_image_performs_real_recognition():
     assert first_region.bbox.height > 0
     assert first_region.confidence is not None
     assert 0.0 <= first_region.confidence <= 1.0
+    assert first_region.uncertainty_level in ("HIGH", "MEDIUM", "LOW", "UNREADABLE")
+    assert first_region.quality_indicators is not None
+    assert parsed.uncertainty is not None
+    assert parsed.uncertainty.total_regions == len(parsed.recognition.regions)
 
 
 def test_analyze_valid_grayscale_jpeg():
@@ -85,6 +91,7 @@ def test_analyze_valid_grayscale_jpeg():
     assert parsed.image.width == 64
     assert parsed.image.height == 48
     assert parsed.image.channels == 1
+    assert parsed.uncertainty is not None
 
 
 def test_analyze_missing_file():

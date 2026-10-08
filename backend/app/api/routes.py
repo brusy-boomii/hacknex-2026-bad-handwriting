@@ -8,11 +8,13 @@ from app.services.handwriting_ocr import (
     OCRModelUnavailableError,
 )
 from app.services.preprocessing import PreprocessingService
+from app.services.uncertainty import UncertaintyService
 from app.utils.config import ALLOWED_IMAGE_EXTENSIONS, get_max_upload_size_bytes
 
 router = APIRouter()
 preprocessing_service = PreprocessingService()
 ocr_service = HandwritingOCRService()
+uncertainty_service = UncertaintyService()
 
 
 @router.get(
@@ -22,14 +24,14 @@ ocr_service = HandwritingOCRService()
 )
 async def health_check() -> HealthResponse:
     """
-    Health check endpoint providing application status and Phase 2 metadata.
+    Health check endpoint providing application status and Phase 3 metadata.
     """
     return HealthResponse(
         status="healthy",
         application="Extreme Bad-Handwriting Digitizing Stack",
-        version="0.2.0",
-        phase=2,
-        description="Phase 2 handwriting recognition pipeline active.",
+        version="0.3.0",
+        phase=3,
+        description="Phase 3 confidence-aware uncertainty detection active.",
     )
 
 
@@ -42,16 +44,16 @@ async def health_check() -> HealthResponse:
         status.HTTP_502_BAD_GATEWAY: {"model": ErrorResponse},
         status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
     },
-    summary="Validate, Preprocess, and Recognize Handwritten Image",
+    summary="Validate, Preprocess, Recognize, and Evaluate Uncertainty on Handwritten Image",
 )
 async def analyze_handwriting(
     file: Optional[UploadFile] = File(default=None),
 ) -> AnalyzeResponse:
     """
-    Phase 2 endpoint for handwriting digitization.
+    Phase 3 endpoint for confidence-aware handwriting digitization.
     Validates the uploaded image, runs handwriting-safe preprocessing, executes
-    optical recognition, and returns recognized text, regions, bounding boxes,
-    and genuine engine confidence scores.
+    PP-OCRv3 optical recognition, evaluates multi-signal region uncertainty,
+    and returns structured recognition and uncertainty results.
     """
     if file is None:
         raise HTTPException(
@@ -126,12 +128,29 @@ async def analyze_handwriting(
                 detail=str(exc),
             ) from exc
 
+        uncertainty_summary = uncertainty_service.analyze_uncertainty(
+            image=prepared.original_image,
+            ocr_regions=ocr_output.result.regions,
+        )
+
+        # Keep recognition.regions synchronized with the enriched region-level uncertainty fields
+        enriched_recognition = ocr_output.result.model_copy(
+            update={"regions": uncertainty_summary.regions}
+        )
+
         combined_warnings = list(prepared.warnings) + list(ocr_output.warnings)
-        region_count = len(ocr_output.result.regions)
+        if uncertainty_summary.flagged_region_count > 0:
+            combined_warnings.append(
+                f"{uncertainty_summary.flagged_region_count} of {uncertainty_summary.total_regions} "
+                f"region(s) flagged for human review (overall reliability: {uncertainty_summary.overall_level})."
+            )
+
+        region_count = len(enriched_recognition.regions)
         if region_count > 0:
             summary_msg = (
                 f"Recognition completed ({region_count} region(s) detected in "
-                f"{ocr_output.result.processing_time_ms:.1f} ms)."
+                f"{enriched_recognition.processing_time_ms:.1f} ms; "
+                f"overall reliability: {uncertainty_summary.overall_level})."
             )
         else:
             summary_msg = "Image validated and processed, but no legible text regions were detected."
@@ -142,7 +161,8 @@ async def analyze_handwriting(
             image=prepared.metadata,
             metadata=prepared.metadata,
             preprocessing=prepared.preprocessing,
-            recognition=ocr_output.result,
+            recognition=enriched_recognition,
+            uncertainty=uncertainty_summary,
             warnings=combined_warnings,
             message=summary_msg,
             pipeline_status="recognition_complete",
