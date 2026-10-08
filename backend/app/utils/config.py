@@ -111,10 +111,28 @@ def get_max_upload_size_bytes() -> int:
 
 def get_allowed_origins() -> List[str]:
     """
-    Retrieve the list of allowed CORS origins from ALLOWED_ORIGINS.
+    Retrieve the list of allowed CORS origins from ALLOWED_ORIGINS and optional FRONTEND_URL.
+    Normalizes origins by stripping trailing slashes and rejects wildcard '*' when explicit
+    origins are configured.
     """
-    raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
-    return [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+    default_origins = (
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:4173,http://127.0.0.1:4173"
+    )
+    raw_origins = os.getenv("ALLOWED_ORIGINS", default_origins)
+    frontend_url = (os.getenv("FRONTEND_URL") or "").split("#")[0].strip()
+
+    candidates = [part.split("#")[0].strip() for part in raw_origins.split(",")]
+    if frontend_url:
+        candidates.append(frontend_url)
+
+    normalized: List[str] = []
+    for origin in candidates:
+        cleaned = origin.rstrip("/")
+        if cleaned and cleaned != "*" and cleaned not in normalized:
+            normalized.append(cleaned)
+
+    return normalized if normalized else ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 
 @dataclass(frozen=True)

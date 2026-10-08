@@ -81,6 +81,16 @@ const REASON_LABELS = {
   no_text_regions_detected: 'No legible text regions detected on page',
 }
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '')
+
+function getApiUrl(endpoint) {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+  if (API_BASE_URL) {
+    return `${API_BASE_URL}${cleanEndpoint}`
+  }
+  return `/api${cleanEndpoint}`
+}
+
 function formatReason(code) {
   return REASON_LABELS[code] || code.replace(/_/g, ' ')
 }
@@ -116,7 +126,7 @@ function App() {
   const [exportMessage, setExportMessage] = useState(null)
 
   useEffect(() => {
-    fetch('/api/health')
+    fetch(getApiUrl('/health'))
       .then(res => res.json())
       .then(data => setSystemStatus(data))
       .catch(err => {
@@ -202,7 +212,7 @@ function App() {
     formData.append('file', file)
 
     try {
-      const response = await fetch('/api/analyze', {
+      const response = await fetch(getApiUrl('/analyze'), {
         method: 'POST',
         body: formData,
       })
@@ -425,7 +435,7 @@ function App() {
     setExportMessage(null)
     try {
       const payload = buildExportPayload()
-      const response = await fetch('/api/export/json', {
+      const response = await fetch(getApiUrl('/export/json'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -453,7 +463,7 @@ function App() {
     setExportMessage(null)
     try {
       const payload = buildExportPayload()
-      const response = await fetch('/api/export/txt', {
+      const response = await fetch(getApiUrl('/export/txt'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

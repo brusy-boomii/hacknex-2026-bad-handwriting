@@ -46,8 +46,16 @@ async def validation_exception_handler(
 
 
 app.include_router(routes.router)
+app.include_router(routes.router, prefix="/api", include_in_schema=False)
 
 if __name__ == "__main__":
-    host = os.getenv("BACKEND_HOST", "127.0.0.1")
-    port = int(os.getenv("BACKEND_PORT", "8000"))
-    uvicorn.run("app.main:app", host=host, port=port, reload=True)
+    environment = os.getenv("ENVIRONMENT", "development").strip().lower()
+    host = os.getenv("BACKEND_HOST", "0.0.0.0")
+    raw_port = os.getenv("PORT") or os.getenv("BACKEND_PORT", "8000")
+    try:
+        port = int(raw_port.split("#")[0].strip())
+    except ValueError:
+        port = 8000
+    use_reload = environment == "development" and not os.getenv("PORT")
+    uvicorn.run("app.main:app", host=host, port=port, reload=use_reload)
+

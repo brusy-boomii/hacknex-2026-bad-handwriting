@@ -49,6 +49,9 @@ frontend/.vite/
 .env
 .env.*
 !.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
 
 # IDEs & Editors
 .vscode/

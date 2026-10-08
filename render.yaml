@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: hacknex-2026-bad-handwriting-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: ENVIRONMENT
+        value: production
+      - key: MAX_UPLOAD_SIZE_BYTES
+        value: "10485760"
+      - key: ALLOWED_ORIGINS
+        value: http://localhost:5173,http://127.0.0.1:5173
+      - key: FRONTEND_URL
+        sync: false
+      - key: SECONDARY_VERIFICATION_ENABLED
+        value: "false"
+      - key: SECONDARY_VERIFICATION_PROVIDER
+        value: none

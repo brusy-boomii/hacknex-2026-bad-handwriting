@@ -8,5 +8,7 @@ pytest
 httpx
 python-dotenv
 numpy
-opencv-python-headless
+onnxruntime
 rapidocr-onnxruntime
+opencv-python-headless
+

@@ -160,3 +160,28 @@ npm run dev
 4. **Inspect Uncertainty Overlay:** Review color-coded bounding boxes (`HIGH`, `MEDIUM`, `LOW`, `UNREADABLE`) over the original image.
 5. **Review Doubtful Regions:** Click any `LOW` or `UNREADABLE` region to inspect its flagged reasons and either **Accept Raw OCR**, **Accept Candidate** (if available), **Reject Candidate**, or **Save Manual Correction**.
 6. **Compare Provenance & Export:** Review the side-by-side **RAW OCR OUTPUT** vs. **HUMAN-VERIFIED OUTPUT** panel and click **Export Plain Text (`.txt`)** or **Export Provenance JSON (`.json`)**.
+
+---
+
+## 14. Production Deployment (Render + Vercel)
+
+### Backend on Render (`render.yaml`)
+- **Root Directory:** `backend`
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **Health Check Path:** `/health`
+- **Required Environment Variables:**
+  - `PYTHON_VERSION=3.11.11`
+  - `ENVIRONMENT=production`
+  - `FRONTEND_URL=https://<your-vercel-domain>.vercel.app` (or include in comma-separated `ALLOWED_ORIGINS`)
+  - `MAX_UPLOAD_SIZE_BYTES=10485760`
+  - `SECONDARY_VERIFICATION_ENABLED=false`
+
+### Frontend on Vercel
+- **Framework Preset:** `Vite`
+- **Root Directory:** `frontend`
+- **Build Command:** `npm run build`
+- **Output Directory:** `dist`
+- **Required Environment Variable:**
+  - `VITE_API_BASE_URL=https://<your-render-service>.onrender.com` (no trailing slash)
+
